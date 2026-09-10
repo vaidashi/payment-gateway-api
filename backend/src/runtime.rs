@@ -52,11 +52,11 @@ pub async fn database_pool(kind: DatabaseKind) -> Result<PgPool, Box<dyn std::er
         .await?)
 }
 
-async fn live() -> HttpResponse {
+pub async fn live() -> HttpResponse {
     HttpResponse::Ok().json(serde_json::json!({ "status": "live" }))
 }
 
-async fn ready(pool: web::Data<PgPool>) -> HttpResponse {
+pub async fn ready(pool: web::Data<PgPool>) -> HttpResponse {
     match sqlx::query("SELECT 1").execute(pool.get_ref()).await {
         Ok(_) => HttpResponse::Ok().json(serde_json::json!({ "status": "ready" })),
         Err(_) => {
