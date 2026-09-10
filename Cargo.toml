@@ -1,0 +1,9 @@
+[workspace]
+members = ["backend"]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+

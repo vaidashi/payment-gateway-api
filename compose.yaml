@@ -1,0 +1,123 @@
+name: mock-food-ordering
+
+services:
+  postgres:
+    image: postgres@sha256:3f55f8895c4ed50603e2fbdfc72fffeeaba3173321fee5cb825bbbeb30d9d854
+    env_file: ${RUNTIME_ENV_FILE:-.env}
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:?copy .env.example to .env and set POSTGRES_SUPERUSER}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?copy .env.example to .env and set POSTGRES_SUPERUSER_PASSWORD}
+      POSTGRES_DB: postgres
+      APP_DATABASE_USER: ${APP_DATABASE_USER:?missing APP_DATABASE_USER}
+      APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD:?missing APP_DATABASE_PASSWORD}
+      APP_DATABASE_NAME: ${APP_DATABASE_NAME:?missing APP_DATABASE_NAME}
+      PROVIDER_DATABASE_USER: ${PROVIDER_DATABASE_USER:?missing PROVIDER_DATABASE_USER}
+      PROVIDER_DATABASE_PASSWORD: ${PROVIDER_DATABASE_PASSWORD:?missing PROVIDER_DATABASE_PASSWORD}
+      PROVIDER_DATABASE_NAME: ${PROVIDER_DATABASE_NAME:?missing PROVIDER_DATABASE_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./infra/postgres/init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username=$$POSTGRES_USER --dbname=postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    networks: [internal]
+
+  redis:
+    image: redis@sha256:be0a135f1955140436b9114da96dd22fbedb874469400b6ef458cc0d42155de0
+    command: ["redis-server", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    networks: [internal]
+
+  migrate:
+    image: postgres@sha256:3f55f8895c4ed50603e2fbdfc72fffeeaba3173321fee5cb825bbbeb30d9d854
+    env_file: ${RUNTIME_ENV_FILE:-.env}
+    environment:
+      APP_DATABASE_URL: ${APP_DATABASE_URL:?missing APP_DATABASE_URL}
+      PROVIDER_DATABASE_URL: ${PROVIDER_DATABASE_URL:?missing PROVIDER_DATABASE_URL}
+    volumes:
+      - ./backend/migrations:/migrations:ro
+      - ./backend/provider_migrations:/provider-migrations:ro
+      - ./infra/postgres/run-migrations.sh:/run-migrations.sh:ro
+    entrypoint: ["/bin/sh", "/run-migrations.sh"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [internal]
+
+  api:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    command: ["api"]
+    env_file: ${RUNTIME_ENV_FILE:-.env}
+    environment:
+      API_LISTEN_ADDR: 0.0.0.0:8080
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    ports: ["127.0.0.1:8081:8080"]
+    networks: [internal]
+
+  worker:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    command: ["worker"]
+    env_file: ${RUNTIME_ENV_FILE:-.env}
+    environment:
+      WORKER_LISTEN_ADDR: 0.0.0.0:8082
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8082/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    networks: [internal]
+
+  mock-provider:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    command: ["mock_provider"]
+    env_file: ${RUNTIME_ENV_FILE:-.env}
+    environment:
+      PROVIDER_LISTEN_ADDR: 0.0.0.0:8083
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8083/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    networks: [internal]
+
+  web:
+    build: { context: web, dockerfile: Dockerfile }
+    environment:
+      VITE_API_TARGET: http://api:8080
+    depends_on:
+      api: { condition: service_healthy }
+    ports: ["127.0.0.1:5173:5173"]
+    networks: [internal]
+
+  proxy:
+    image: caddy@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    depends_on:
+      api: { condition: service_healthy }
+      web: { condition: service_started }
+    ports: ["127.0.0.1:8080:80"]
+    volumes: ["./infra/proxy/Caddyfile:/etc/caddy/Caddyfile:ro"]
+    networks: [internal]
+
+volumes:
+  postgres_data:
+
+networks:
+  internal:
+    internal: true
