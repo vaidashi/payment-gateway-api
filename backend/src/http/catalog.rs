@@ -19,7 +19,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             "/api/restaurants/{id}/menu/{item_id}/availability",
             web::patch().to(availability),
         )
-        .route("/api/orders/quote", web::post().to(quote));
+        .route("/api/orders/quote", web::post().to(quote))
+        .configure(super::orders::configure);
 }
 async fn session(pool: web::Data<PgPool>, req: HttpRequest) -> HttpResponse {
     match auth::identity(&pool, &req).await {
@@ -125,7 +126,23 @@ async fn availability(
         return HttpResponse::Forbidden().finish();
     }
     let (restaurant, item) = path.into_inner();
-    let changed=sqlx::query("UPDATE menu_items SET available=$1 WHERE id=$2 AND restaurant_id=$3 AND EXISTS(SELECT 1 FROM staff_restaurants WHERE user_id=$4 AND restaurant_id=$3)").bind(body.available).bind(item).bind(restaurant).bind(i.user_id).execute(pool.get_ref()).await.map(|x|x.rows_affected()).unwrap_or(0);
+    let Ok(mut tx) = pool.begin().await else {
+        return HttpResponse::InternalServerError().finish();
+    };
+    let allowed = sqlx::query_scalar::<_, Uuid>("SELECT r.id FROM restaurants r JOIN staff_restaurants sr ON sr.restaurant_id=r.id WHERE r.id=$1 AND sr.user_id=$2 FOR UPDATE OF r")
+        .bind(restaurant).bind(i.user_id).fetch_optional(&mut *tx).await.unwrap_or(None).is_some();
+    if !allowed {
+        return HttpResponse::NotFound().finish();
+    }
+    let changed =
+        sqlx::query("UPDATE menu_items SET available=$1 WHERE id=$2 AND restaurant_id=$3")
+            .bind(body.available)
+            .bind(item)
+            .bind(restaurant)
+            .execute(&mut *tx)
+            .await
+            .map(|x| x.rows_affected())
+            .unwrap_or(0);
     if changed == 0 {
         return HttpResponse::NotFound().finish();
     }
@@ -133,8 +150,11 @@ async fn availability(
         "UPDATE restaurants SET configuration_version=configuration_version+1 WHERE id=$1",
     )
     .bind(restaurant)
-    .execute(pool.get_ref())
+    .execute(&mut *tx)
     .await;
+    if tx.commit().await.is_err() {
+        return HttpResponse::InternalServerError().finish();
+    }
     HttpResponse::Ok().finish()
 }
 async fn quote(

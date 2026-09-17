@@ -1,8 +1,8 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub const MAX_TOTAL_CENTS: i64 = 1_000_000;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Totals {
     pub subtotal_cents: i64,
     pub tax_cents: i64,

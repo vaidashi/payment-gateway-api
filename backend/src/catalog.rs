@@ -3,12 +3,12 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct QuoteRequest {
     pub restaurant_id: String,
     pub lines: Vec<QuoteLine>,
 }
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct QuoteLine {
     pub item_id: String,
     pub quantity: i32,
