@@ -1,0 +1,38 @@
+openapi: 3.1.0
+info:
+  title: Mock Food Ordering API
+  version: 0.2.0
+paths:
+  /api/session:
+    get: { summary: Bootstrap or inspect a demo session, responses: { '200': { description: Session and CSRF token } } }
+  /api/demo/accounts:
+    get: { summary: List seeded display identities, responses: { '200': { description: Demo accounts } } }
+  /api/demo/session:
+    post: { summary: Select demo identity, responses: { '200': { description: Rotated session }, '403': { description: Invalid Origin or CSRF } } }
+  /api/restaurants:
+    get: { summary: List restaurants, responses: { '200': { description: Directory } } }
+  /api/restaurants/{id}/menu:
+    get: { summary: Read public menu, parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }], responses: { '200': { description: Menu } } }
+  /api/restaurants/{id}/menu/{item_id}/availability:
+    patch: { summary: Toggle availability for assigned staff, responses: { '200': { description: Changed }, '401': { description: Session required }, '403': { description: Scope or CSRF denied } } }
+  /api/orders/quote:
+    post:
+      summary: Compute authoritative checkout quote
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/QuoteRequest' } } } }
+      responses: { '200': { description: Exact quote }, '422': { description: Invalid cart or configuration } }
+components:
+  schemas:
+    QuoteRequest:
+      type: object
+      required: [restaurant_id, lines]
+      properties:
+        restaurant_id: { type: string, format: uuid }
+        lines: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/QuoteLine' } }
+    QuoteLine:
+      type: object
+      required: [item_id, quantity]
+      properties:
+        item_id: { type: string, format: uuid }
+        quantity: { type: integer, minimum: 1, maximum: 99 }
+        selections: { type: array, items: { type: string, format: uuid } }
+        extras: { type: array, maxItems: 20, items: { type: string, format: uuid } }

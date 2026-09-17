@@ -35,6 +35,8 @@ docker compose --project-name mock-food-ordering-dev config
 
 To start each backend process without Compose, provide its required database URL first. `mock_provider` also requires `PROVIDER_SERVICE_TOKEN`. A missing value exits with a named configuration error. No real payment account, card data, or payment credential is used.
 
+The API seeds four restaurants (12 items each), four customers, four restaurant-scoped staff accounts, and one admin on its first successful startup after migrations. Start with `GET /api/session` to receive a CSRF-bound anonymous cookie, list identities through `GET /api/demo/accounts`, then select one through `POST /api/demo/session` with the cookie, exact `Origin`, and `X-CSRF-Token` header. Quotes at `POST /api/orders/quote` use integer cents and basis points and always re-read PostgreSQL; Redis is not used as a monetary authority.
+
 ## Version pins
 
 - Rust `1.97.1`: installed toolchain used to produce the lockfile; the workspace MSRV is `1.88`, matching Actix Web 4.15's documented floor.
