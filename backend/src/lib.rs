@@ -1,8 +1,11 @@
 pub mod auth;
 pub mod catalog;
 pub mod http;
+pub mod jobs;
 pub mod mock_provider;
 pub mod money;
 pub mod orders;
+pub mod payments;
+pub mod provider_client;
 pub mod runtime;
 pub mod seed;

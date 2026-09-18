@@ -27,6 +27,8 @@ paths:
     get: { summary: Read an authorized immutable order snapshot, parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }], responses: { '200': { description: Order }, '404': { description: Missing or inaccessible order } } }
   /api/orders/{id}/cancel:
     post: { summary: Idempotently cancel an eligible order, parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, format: uuid } }], responses: { '200': { description: Cancelled }, '409': { description: Stale or forbidden state } } }
+  /api/orders/{id}/payment:
+    post: { summary: Queue one idempotent mock-provider capture attempt for a placed customer order, parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, format: uuid } }], responses: { '202': { description: Payment confirmation pending }, '409': { description: Existing pending, paid, or cancelled payment state } } }
   /api/orders/{id}/status:
     patch: { summary: Idempotently advance an assigned restaurant order, parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }, { name: Idempotency-Key, in: header, required: true, schema: { type: string, format: uuid } }], responses: { '200': { description: Advanced order }, '403': { description: Scope denied }, '409': { description: Stale or forbidden state } } }
 components:

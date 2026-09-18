@@ -14,4 +14,4 @@ sha2 = "=0.10.9"
 uuid = { version = "=1.18.1", features = ["v4", "serde"] }
 hmac = "=0.12.1"
 hex = "=0.4.3"
-reqwest = { version = "=0.12.28", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "=0.12.28", default-features = false, features = ["rustls-tls", "json"] }

@@ -1,8 +1,10 @@
 use crate::{
     auth,
     orders::{self, CreateOrderRequest, OrderError, OrderStatus, StatusCommand, VersionedCommand},
+    payments,
 };
 use actix_web::{HttpRequest, HttpResponse, web};
+use serde::Deserialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -11,7 +13,49 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .route("/api/orders", web::get().to(list))
         .route("/api/orders/{id}", web::get().to(detail))
         .route("/api/orders/{id}/cancel", web::post().to(cancel))
+        .route("/api/orders/{id}/payment", web::post().to(payment))
         .route("/api/orders/{id}/status", web::patch().to(status));
+}
+#[derive(Deserialize)]
+struct PaymentCommand {
+    scenario: String,
+}
+async fn payment(
+    pool: web::Data<PgPool>,
+    req: HttpRequest,
+    path: web::Path<Uuid>,
+    body: web::Json<PaymentCommand>,
+) -> HttpResponse {
+    let identity = match actor(&pool, &req).await {
+        Ok(i) => i,
+        Err(r) => return r,
+    };
+    if identity.role.as_deref() != Some("customer") {
+        return HttpResponse::Forbidden().finish();
+    }
+    if let Err(r) = auth::require_mutation(&req, &identity) {
+        return r;
+    }
+    let key = match key(&req) {
+        Ok(k) => k,
+        Err(r) => return r,
+    };
+    let provider_attempt_id = format!("att_{}", key.simple());
+    match payments::queue_capture(
+        &pool,
+        *path,
+        key,
+        provider_attempt_id,
+        body.scenario.clone(),
+    )
+    .await
+    {
+        Ok(true) => HttpResponse::Accepted().json(serde_json::json!({"status":"pending"})),
+        Ok(false) => {
+            HttpResponse::Conflict().json(serde_json::json!({"code":"payment_not_retryable"}))
+        }
+        Err(_) => HttpResponse::InternalServerError().finish(),
+    }
 }
 fn key(req: &HttpRequest) -> Result<Uuid, HttpResponse> {
     req.headers()
