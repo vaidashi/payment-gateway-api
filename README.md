@@ -33,7 +33,7 @@ cargo build --locked --workspace
 docker compose --project-name mock-food-ordering-dev config
 ```
 
-To start each backend process without Compose, provide its required database URL first. `mock_provider` also requires `PROVIDER_SERVICE_TOKEN`. A missing value exits with a named configuration error. No real payment account, card data, or payment credential is used.
+To start each backend process without Compose, provide its required database URL first. `mock_provider` also requires `PROVIDER_SERVICE_TOKEN`, `PROVIDER_CALLBACK_URL`, and `PROVIDER_CALLBACK_SIGNING_SECRET`. Its internal `/v1/payment_intents` API accepts only the service token; it persists intent, attempt, capture, refund, event, and delivery state in the provider database. Callbacks have a stable event ID and are re-signed over `timestamp.raw-body` on each retry. No real payment account, card data, or payment credential is used.
 
 The API seeds four restaurants (12 items each), four customers, four restaurant-scoped staff accounts, and one admin on its first successful startup after migrations. Start with `GET /api/session` to receive a CSRF-bound anonymous cookie, list identities through `GET /api/demo/accounts`, then select one through `POST /api/demo/session` with the cookie, exact `Origin`, and `X-CSRF-Token` header. Quotes at `POST /api/orders/quote` use integer cents and basis points and always re-read PostgreSQL; Redis is not used as a monetary authority.
 
