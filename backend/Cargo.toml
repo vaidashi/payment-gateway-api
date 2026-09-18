@@ -12,3 +12,6 @@ sqlx = { version = "=0.9.0", default-features = false, features = ["postgres", "
 tokio = { version = "=1.48.0", features = ["macros", "rt-multi-thread", "signal"] }
 sha2 = "=0.10.9"
 uuid = { version = "=1.18.1", features = ["v4", "serde"] }
+hmac = "=0.12.1"
+hex = "=0.4.3"
+reqwest = { version = "=0.12.28", default-features = false, features = ["rustls-tls"] }
