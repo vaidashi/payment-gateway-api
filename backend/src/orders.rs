@@ -1,7 +1,7 @@
 use crate::{catalog::QuoteRequest, money::Totals};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -284,6 +284,20 @@ pub async fn transition(
         return command(pool, actor_id, operation, key, &digest)
             .await?
             .ok_or(OrderError::Conflict("command_in_progress"));
+    }
+    // Cancellation and its known monetary follow-up commit together. A capture that arrives
+    // later is handled by payments::apply_capture under the same order lock.
+    if requested == OrderStatus::Cancelled {
+        let captures = sqlx::query("SELECT provider_intent_id,provider_capture_id FROM payment_attempts WHERE order_id=$1 AND provider_capture_id IS NOT NULL FOR UPDATE")
+            .bind(order_id).fetch_all(&mut *tx).await?;
+        for capture in captures {
+            let intent: String = capture.get("provider_intent_id");
+            let capture_id: String = capture.get("provider_capture_id");
+            sqlx::query("INSERT INTO refund_obligations(id,order_id,provider_intent_id,provider_capture_id,amount_cents,currency,status) VALUES($1,$2,$3,$4,$5,'usd','pending') ON CONFLICT(provider_capture_id) DO NOTHING")
+                .bind(Uuid::new_v4()).bind(order_id).bind(&intent).bind(&capture_id).bind(row.8).execute(&mut *tx).await?;
+            sqlx::query("INSERT INTO durable_jobs(id,kind,dedupe_key,payload) VALUES($1,'refund',$2,$3) ON CONFLICT(dedupe_key) DO NOTHING")
+                .bind(Uuid::new_v4()).bind(format!("refund:{capture_id}")).bind(serde_json::json!({"capture_id":capture_id})).execute(&mut *tx).await?;
+        }
     }
     tx.commit().await?;
     Ok((200, response))
